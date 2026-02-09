@@ -2,7 +2,7 @@
 
 set -exuo pipefail
 
-BUILD_ARGS=""
+BUILD_ARGS="--skip_pip_install --parallel=4"
 
 if [[ "${PKG_NAME}" == 'onnxruntime-novec' ]]; then
     DONT_VECTORIZE="ON"
@@ -22,12 +22,6 @@ fi
 
 if [[ "${target_platform:-other}" == 'osx-arm64' ]]; then
     BUILD_ARGS="${BUILD_ARGS} --osx_arch arm64"
-elif [[ "${target_platform:-other}" == 'osx-64' ]]; then
-    BUILD_ARGS="${BUILD_ARGS} --osx_arch x86_64"
-fi
-
-if [[ "${target_platform}" == "osx-64" ]]; then
-    export CXXFLAGS="${CXXFLAGS} -D_LIBCPP_DISABLE_AVAILABILITY"
 fi
 
 if [[ "${target_platform}" == "linux-64" || "${target_platform}" == "linux-aarch64" ]]; then
@@ -37,21 +31,6 @@ if [[ "${target_platform}" == "linux-64" || "${target_platform}" == "linux-aarch
     LDFLAGS+=" -Wl,-z,noexecstack"
 fi
 
-if [[ ! -z "${cuda_compiler_version+x}" && "${cuda_compiler_version}" != "None" ]]; then
-  if [[ "${cuda_compiler_version}" == 12* ]]; then
-    if [[ "${target_platform}" == "linux-64" ]]; then
-      export CUDA_HOME="${BUILD_PREFIX}/targets/x86_64-linux"
-    elif [[ "${target_platform}" == "linux-aarch64" ]]; then
-      export CUDA_HOME="${BUILD_PREFIX}/targets/sbsa-linux"
-    else
-      echo "CUDA 12 has not been configured for this architecture"
-      exit 1
-    fi
-  fi
-  BUILD_ARGS="${BUILD_ARGS} --use_cuda --cuda_home ${CUDA_HOME} --cudnn_home ${PREFIX} --parallel=1"
-  export NINJAJOBS=1
-fi
-
 cmake_extra_defines=( "EIGEN_MPL2_ONLY=ON" \
                       "FLATBUFFERS_BUILD_FLATC=OFF" \
                       "onnxruntime_USE_COREML=OFF" \
@@ -59,7 +38,6 @@ cmake_extra_defines=( "EIGEN_MPL2_ONLY=ON" \
                       "onnxruntime_BUILD_SHARED_LIB=ON" \
                       "onnxruntime_BUILD_UNIT_TESTS=$BUILD_UNIT_TESTS" \
                       "CMAKE_PREFIX_PATH=$PREFIX" \
-                      "CMAKE_CUDA_ARCHITECTURES=all-major"
                       "CMAKE_CXX_STANDARD=17" \
 		      "CMAKE_INSTALL_LIBDIR=lib"
 )
@@ -75,6 +53,38 @@ do
     fi
 done
 
+# nvcc is at $BUILD_PREFIX/bin, not $CUDA_HOME/bin in conda-forge CUDA 12
+if [[ ! -z "${cuda_compiler_version+x}" && "${cuda_compiler_version}" != "None" ]]; then
+    case ${cuda_compiler_version} in
+	12.9)
+            export CUDA_ARCH_LIST="70-real;75-real;80-real;86-real;89-real;90-real;100-real;120"
+            ;;
+	13.0)
+            export CUDA_ARCH_LIST="75-real;80-real;86-real;89-real;90-real;100-real;120"
+            ;;
+	*)
+            echo "No CUDA architecture list exists for CUDA v${cuda_compiler_version}. See build.sh for information on adding one."
+	    exit 1
+    esac
+    case ${target_platform} in
+	linux-64)
+            CUDA_TARGET=x86_64-linux
+            ;;
+	linux-aarch64)
+            CUDA_TARGET=sbsa-linux
+            ;;
+	*)
+            echo "unknown CUDA arch, edit build.sh"
+            exit 1
+    esac
+    export CUDA_HOME="${BUILD_PREFIX}/targets/${CUDA_TARGET}"
+    BUILD_ARGS="${BUILD_ARGS} --use_cuda --cuda_home ${CUDA_HOME} --cudnn_home ${PREFIX}"
+    export NINJAJOBS=1
+    cmake_extra_defines+=( "CMAKE_CUDA_COMPILER=${BUILD_PREFIX}/bin/nvcc" \
+			   "CMAKE_CUDA_ARCHITECTURES=${CUDA_ARCH_LIST}"
+			 )
+
+fi
 
 python tools/ci_build/build.py \
     --compile_no_warning_as_error \
