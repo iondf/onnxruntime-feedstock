@@ -60,6 +60,8 @@ cmake_extra_defines=( "EIGEN_MPL2_ONLY=ON" \
                       "onnxruntime_BUILD_UNIT_TESTS=$BUILD_UNIT_TESTS" \
                       "CMAKE_PREFIX_PATH=$PREFIX" \
                       "CMAKE_CUDA_ARCHITECTURES=all-major"
+                      "CMAKE_CXX_STANDARD=17" \
+		      "CMAKE_INSTALL_LIBDIR=lib"
 )
 
 # Copy the defines from the "activate" script (e.g. activate-gcc_linux-aarch64.sh)
@@ -87,6 +89,10 @@ python tools/ci_build/build.py \
     --skip_submodule_sync \
     --path_to_protoc_exe $BUILD_PREFIX/bin/protoc \
     ${BUILD_ARGS}
+
+# Install the project into cwd.
+# This is needed only to produce the exported CMake targets.
+cmake --install build-ci/Release --prefix "install-ci"
 
 for whl_file in build-ci/Release/dist/onnxruntime*.whl; do
     python -m pip install "$whl_file"

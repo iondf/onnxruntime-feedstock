@@ -29,6 +29,10 @@ if "%cuda_compiler_version%"=="None" (
     if errorlevel 1 exit 1
 )
 
+:: Install the project into cwd.
+:: This is needed only to produce the exported CMake targets.
+cmake --install build-ci/Release --prefix "install-ci"
+
 :: In theory there should be only one wheel
 for %%F in (build-ci\Release\dist\onnxruntime*.whl) do (
     python -m pip install %%F

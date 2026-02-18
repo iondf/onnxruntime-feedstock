@@ -144,6 +144,7 @@ outputs:
       requires:
         - {{ compiler('cxx') }}
         - {{ stdlib("c") }}
+        - cmake-package-check
       files:
         - test.cpp
         - run_cpp_test.bat  # [win]
@@ -163,6 +164,7 @@ outputs:
         - $CXX $CXXFLAGS -I$PREFIX/include/ -L$PREFIX/lib/ -lonnxruntime -Wl,-rpath,$CONDA_PREFIX/lib test.cpp  # [osx]
         - ./a.out  # [unix]
         - call .\run_cpp_test.bat  # [win]
+        - cmake-package-check onnxruntime --targets onnxruntime::onnxruntime
 
 about:
   home: https://github.com/microsoft/onnxruntime/

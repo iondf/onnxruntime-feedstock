@@ -3,8 +3,9 @@
 set -exuo pipefail
 
 mkdir -p "${PREFIX}/include"
-mkdir -p "${PREFIX}/lib"
+mkdir -p "${PREFIX}/lib/cmake"
 cp -pr include/onnxruntime "${PREFIX}/include/"
+cp -pr install-ci/lib/cmake/onnxruntime "${PREFIX}/lib/cmake/"
 
 if [[ -n "${OSX_ARCH:+yes}" ]]; then
     install build-ci/Release/libonnxruntime.*dylib "${PREFIX}/lib"
