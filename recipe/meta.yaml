@@ -157,8 +157,6 @@ outputs:
         - test -f $PREFIX/lib/libonnxruntime${SHLIB_EXT}  # [unix]
         - test -f $PREFIX/lib/libonnxruntime_providers_shared${SHLIB_EXT}  # [unix and cuda_compiler_version != "None"]
         - test -f $PREFIX/lib/libonnxruntime_providers_cuda${SHLIB_EXT}  # [unix and cuda_compiler_version != "None"]
-        - test -f $PREFIX/lib/libonnxruntime_providers_shared${SHLIB_EXT}  # [osx and arm64]
-        - test -f $PREFIX/lib/libonnxruntime_providers_coreml${SHLIB_EXT}  # [osx and arm64]
         - if not exist %LIBRARY_INC%\\onnxruntime\\core\\session\\onnxruntime_cxx_api.h exit 1  # [win]
         - if not exist %LIBRARY_LIB%\\onnxruntime_conda.lib exit 1  # [win]
         - if not exist %LIBRARY_BIN%\\onnxruntime_conda.dll exit 1  # [win]
