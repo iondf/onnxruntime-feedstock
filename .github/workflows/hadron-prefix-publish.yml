@@ -1,0 +1,163 @@
+name: Hadron Prefix Publish
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/hadron-prefix-publish.yml"
+      - ".ci_support/osx_arm64_hadron_coremlpython3.13suffix.yaml"
+      - "recipe/**"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "prefix.dev channel"
+        required: false
+        default: "hadron"
+        type: string
+      build_num:
+        description: "Conda build number override"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate recipe renders
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup micromamba
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          init-shell: bash
+          environment-name: render
+          create-args: conda-build
+
+      - name: Render publish variant
+        shell: bash -el {0}
+        run: |
+          set -euo pipefail
+          conda render recipe -m ".ci_support/osx_arm64_hadron_coremlpython3.13suffix.yaml" --no-source
+
+  build-and-publish:
+    name: onnxruntime-osx-arm64-coreml
+    needs: validate
+    runs-on: macos-15
+    timeout-minutes: 720
+    env:
+      CONFIG: osx_arm64_hadron_coremlpython3.13suffix
+      UPLOAD_PACKAGES: "False"
+      IS_PR_BUILD: "True"
+      CI: github_actions
+      SKIP_OUTPUT_VALIDATION: "True"
+      FEEDSTOCK_NAME: ${{ github.event.repository.name }}
+      GIT_BRANCH: ${{ github.ref_name }}
+      flow_run_id: github_${{ github.run_id }}
+      remote_url: https://github.com/${{ github.repository }}
+      sha: ${{ github.sha }}
+      CONDA_BLD_PATH: /tmp/cb
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve prefix channel
+        id: channel
+        shell: bash
+        env:
+          INPUT_CHANNEL: ${{ github.event.inputs.channel }}
+          VAR_CHANNEL: ${{ vars.PREFIX_CHANNEL }}
+        run: |
+          set -euo pipefail
+          channel="${INPUT_CHANNEL}"
+          if [ -z "${channel}" ]; then
+            channel="${VAR_CHANNEL}"
+          fi
+          if [ -z "${channel}" ]; then
+            channel="hadron"
+          fi
+          echo "channel=${channel}" >> "${GITHUB_OUTPUT}"
+          echo "Publishing to prefix.dev/${channel}"
+
+      - name: Override recipe build number
+        if: ${{ github.event.inputs.build_num != '' }}
+        shell: bash
+        env:
+          INPUT_BUILD_NUM: ${{ github.event.inputs.build_num }}
+        run: |
+          set -euo pipefail
+          if ! [[ "${INPUT_BUILD_NUM}" =~ ^[0-9]+$ ]]; then
+            echo "build_num must be an integer (0, 1, 2, ...)."
+            exit 1
+          fi
+          awk -v n="${INPUT_BUILD_NUM}" '
+            BEGIN { done=0 }
+            /^[[:space:]]*\{% set build = [0-9]+ %\}[[:space:]]*$/ && done==0 {
+              sub(/[0-9]+/, n)
+              done=1
+            }
+            { print }
+            END {
+              if (done==0) {
+                print "Could not find {% set build = N %} in recipe/meta.yaml" > "/dev/stderr"
+                exit 2
+              }
+            }
+          ' recipe/meta.yaml > recipe/meta.yaml.tmp
+          mv recipe/meta.yaml.tmp recipe/meta.yaml
+          grep -n "set build" recipe/meta.yaml
+
+      - name: Build conda package
+        shell: bash
+        run: |
+          set -euo pipefail
+          retry_build() {
+            local attempt=1
+            local max_attempts=3
+            until .scripts/run_osx_build.sh; do
+              if [ "${attempt}" -ge "${max_attempts}" ]; then
+                return 1
+              fi
+              echo "Build attempt ${attempt} failed; retrying after a short backoff."
+              attempt=$((attempt + 1))
+              sleep 90
+            done
+          }
+          retry_build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: conda-osx-arm64-coreml
+          path: /tmp/cb/osx-arm64/*
+
+      - name: Setup micromamba
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          init-shell: bash
+          environment-name: publish
+          create-args: rattler-build
+
+      - name: Upload package to prefix.dev
+        shell: bash -el {0}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(/tmp/cb/osx-arm64/*.conda /tmp/cb/osx-arm64/*.tar.bz2)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No packages found for osx-arm64"
+            exit 1
+          fi
+          for pkg in "${files[@]}"; do
+            echo "Uploading ${pkg}"
+            rattler-build upload prefix --skip-existing -c "${{ steps.channel.outputs.channel }}" "${pkg}"
+          done

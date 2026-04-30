@@ -1,8 +1,15 @@
 {% set cuda_enabled = cuda_compiler_version != "None" %}
-{% set build_ext = ("cuda" ~ cuda_compiler_version).replace(".", "") if cuda_enabled else "cpu" %}
+{% set coreml_enabled = (target_platform|default("") == "osx-arm64") and not cuda_enabled %}
+{% if cuda_enabled %}
+{% set build_ext = ("cuda" ~ cuda_compiler_version).replace(".", "") %}
+{% elif coreml_enabled %}
+{% set build_ext = "coreml" %}
+{% else %}
+{% set build_ext = "cpu" %}
+{% endif %}
 {% set version = "1.24.2" %}
 {% set suffix = "" %}  # [suffix == None]
-{% set build = 0 %}
+{% set build = 1 %}
 
 {% if cuda_enabled %}
 {% set build = build + 200 %}
@@ -109,6 +116,7 @@ test:
   commands:
     - pip check
     - onnxruntime_test --help
+    - python -c "import onnxruntime as ort; providers = ort.get_available_providers(); assert 'CoreMLExecutionProvider' in providers, providers"  # [osx and arm64]
   requires:
     - pip
     # 2024/05 hmaarrfk/jtilly
@@ -149,6 +157,8 @@ outputs:
         - test -f $PREFIX/lib/libonnxruntime${SHLIB_EXT}  # [unix]
         - test -f $PREFIX/lib/libonnxruntime_providers_shared${SHLIB_EXT}  # [unix and cuda_compiler_version != "None"]
         - test -f $PREFIX/lib/libonnxruntime_providers_cuda${SHLIB_EXT}  # [unix and cuda_compiler_version != "None"]
+        - test -f $PREFIX/lib/libonnxruntime_providers_shared${SHLIB_EXT}  # [osx and arm64]
+        - test -f $PREFIX/lib/libonnxruntime_providers_coreml${SHLIB_EXT}  # [osx and arm64]
         - if not exist %LIBRARY_INC%\\onnxruntime\\core\\session\\onnxruntime_cxx_api.h exit 1  # [win]
         - if not exist %LIBRARY_LIB%\\onnxruntime_conda.lib exit 1  # [win]
         - if not exist %LIBRARY_BIN%\\onnxruntime_conda.dll exit 1  # [win]

@@ -3,6 +3,7 @@
 set -exuo pipefail
 
 BUILD_ARGS="--skip_pip_install --parallel=4"
+USE_COREML="OFF"
 
 if [[ "${PKG_NAME}" == 'onnxruntime-novec' ]]; then
     DONT_VECTORIZE="ON"
@@ -22,6 +23,8 @@ fi
 
 if [[ "${target_platform:-other}" == 'osx-arm64' ]]; then
     BUILD_ARGS="${BUILD_ARGS} --osx_arch arm64"
+    BUILD_ARGS="${BUILD_ARGS} --use_coreml"
+    USE_COREML="ON"
 fi
 
 if [[ "${target_platform}" == "linux-64" || "${target_platform}" == "linux-aarch64" ]]; then
@@ -33,7 +36,7 @@ fi
 
 cmake_extra_defines=( "EIGEN_MPL2_ONLY=ON" \
                       "FLATBUFFERS_BUILD_FLATC=OFF" \
-                      "onnxruntime_USE_COREML=OFF" \
+                      "onnxruntime_USE_COREML=$USE_COREML" \
                       "onnxruntime_DONT_VECTORIZE=$DONT_VECTORIZE" \
                       "onnxruntime_BUILD_SHARED_LIB=ON" \
                       "onnxruntime_BUILD_UNIT_TESTS=$BUILD_UNIT_TESTS" \

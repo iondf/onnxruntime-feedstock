@@ -9,6 +9,12 @@ cp -pr install-ci/lib/cmake/onnxruntime "${PREFIX}/lib/cmake/"
 
 if [[ -n "${OSX_ARCH:+yes}" ]]; then
     install build-ci/Release/libonnxruntime.*dylib "${PREFIX}/lib"
+    if [[ -f build-ci/Release/libonnxruntime_providers_shared.dylib ]]; then
+        install build-ci/Release/libonnxruntime_providers_shared.dylib "${PREFIX}/lib"
+    fi
+    if [[ -f build-ci/Release/libonnxruntime_providers_coreml.dylib ]]; then
+        install build-ci/Release/libonnxruntime_providers_coreml.dylib "${PREFIX}/lib"
+    fi
 else
     install build-ci/Release/libonnxruntime.so* "${PREFIX}/lib"
     if [[ ! -z "${cuda_compiler_version+x}" && "${cuda_compiler_version}" != "None" ]]; then
